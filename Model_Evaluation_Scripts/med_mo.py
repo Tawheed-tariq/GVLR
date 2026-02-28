@@ -5,7 +5,7 @@ import re
 import torch
 from PIL import Image
 from tqdm import tqdm
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 import ijson
 
 
@@ -14,66 +14,35 @@ def stream_json(path):
         objects = ijson.items(f, "item")
         for obj in objects:
             yield obj
-
+# R001_ch1_video_01_00-10-37-20.jpg
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset_json", default="/home/scratch-btech/Tawheed/SurgicalDataset/Combined_1016/output.json")
-    p.add_argument("--image_dir", default="/home/scratch-btech/Tawheed/SurgicalDataset/Combined_1016/")
-    p.add_argument("--output_dir", default="/home/2022bite008/Surgical/Outputs/QWEN_2_5")
-    p.add_argument("--model_name", default="Qwen/Qwen2.5-VL-7B-Instruct")
+    p.add_argument("--dataset_json", default="/home/scratch-scholars/Tawheed/Combined_1016/output.json")
+    p.add_argument("--image_dir", default="/home/scratch-scholars/Tawheed/Combined_1016/")
+    p.add_argument("--output_dir", default="/home/gaash/Surgical/Outputs/MED_MO")
+    p.add_argument("--model_name", default="MBZUAI/MedMO-8B")
     return p.parse_args()
 
 
 def parse_qwen_output(text):
     try:
-        ans = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL | re.IGNORECASE)
-        if ans is None:
+        # search for bbox pattern like [x1, y1, x2, y2]
+        match = re.search(r"\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]", text)
+
+        if not match:
             return None, None, ""
 
-        answer_text = ans.group(1).strip()
+        x1, y1, x2, y2 = map(int, match.groups())
+        bbox = [x1, y1, x2, y2]
 
-        # Try strict JSON first
-        try:
-            data = json.loads(answer_text)
-        except json.JSONDecodeError:
-            # Attempt light repair
-            answer_text = answer_text.replace("'", '"')
-            answer_text = re.sub(r",\s*}", "}", answer_text)
-            answer_text = re.sub(r",\s*]", "]", answer_text)
-            try:
-                data = json.loads(answer_text)
-            except:
-                return None, None, ""
+        # calculate center point
+        center_point = [
+            (x1 + x2) // 2,
+            (y1 + y2) // 2
+        ]
 
-        if isinstance(data, dict):
-            data = [data]
-
-        if not isinstance(data, list) or len(data) == 0:
-            return None, None, ""
-
-        detection = data[0]
-
-        cleaned_detection = {}
-        for k, v in detection.items():
-            cleaned_key = k.strip()
-            cleaned_detection[cleaned_key] = v
-
-        bbox = cleaned_detection.get("bbox_2d")
-        if not bbox or len(bbox) != 4:
-            return None, None, ""
-
-        point = cleaned_detection.get("point_2d")
-        if not point or len(point) != 2:
-            point = [
-                (bbox[0] + bbox[2]) // 2,
-                (bbox[1] + bbox[3]) // 2
-            ]
-
-        think = re.search(r"<think>(.*?)</think>", text, re.DOTALL | re.IGNORECASE)
-        think_text = think.group(1).strip() if think else ""
-
-        return bbox, point, think_text
+        return bbox, center_point, ""
 
     except Exception as e:
         print("Parse error:", e)
@@ -111,9 +80,9 @@ def main():
 
     print("Loading Qwen3 model...")
     processor = AutoProcessor.from_pretrained(args.model_name)
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    model = Qwen3VLForConditionalGeneration.from_pretrained(
         args.model_name,
-        torch_dtype="auto",
+        dtype="auto",
         device_map="auto"
     )
     print("Model loaded successfully")
@@ -165,11 +134,10 @@ def main():
                     "role": "user",
                     "content": [
                         {"type": "image", "image": img},
-                        {"type": "text", "text": PROMPT.format(instruction=item["text"], tool_name=item["tool_name"])}
+                        {"type": "text", "text": f"You are a precise vision localization assistant, Instruction: {item['text']} Tool name: {item['tool_name']}, return bounding box of tool in format [x1, y1, x2, y2]"}
                     ]
                 }]
 
-                print(messages)
 
                 inputs = processor.apply_chat_template(
                     messages,
@@ -196,7 +164,6 @@ def main():
                     skip_special_tokens=True
                 )[0]
 
-                print(output_text)
 
                 bbox, point, think_text = parse_qwen_output(output_text)
 

@@ -5,7 +5,7 @@ import re
 import torch
 from PIL import Image
 from tqdm import tqdm
-from transformers import Gemma3ForConditionalGeneration, AutoProcessor
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 import ijson
 
 
@@ -18,10 +18,10 @@ def stream_json(path):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset_json", default="/home/scratch-btech/Tawheed/SurgicalDataset/Combined_1016/output.json")
-    p.add_argument("--image_dir", default="/home/scratch-btech/Tawheed/SurgicalDataset/Combined_1016/")
-    p.add_argument("--output_dir", default="/home/2022bite008/Surgical/Outputs/GEMMA_3_27B")
-    p.add_argument("--model_name", default="google/gemma-3-27b-it")
+    p.add_argument("--dataset_json", default="/home/scratch-scholars/Tawheed/Combined_1016/output.json")
+    p.add_argument("--image_dir", default="/home/scratch-scholars/Tawheed/Combined_1016/")
+    p.add_argument("--output_dir", default="/home/gaash/Surgical/Outputs/QWEN_2_5_Prompt_changed")
+    p.add_argument("--model_name", default="Qwen/Qwen2.5-VL-7B-Instruct")
     return p.parse_args()
 
 
@@ -111,34 +111,62 @@ def main():
 
     print("Loading Qwen3 model...")
     processor = AutoProcessor.from_pretrained(args.model_name)
-    model = Gemma3ForConditionalGeneration.from_pretrained(
+    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         args.model_name,
         torch_dtype="auto",
         device_map="auto"
     )
     print("Model loaded successfully")
 
+    # PROMPT = """
+    #     You are a precise vision localization assistant.
+
+    #     Return STRICT JSON format:
+
+    #     <think>
+    #     brief reasoning
+    #     </think>
+    #     <answer>
+    #     [
+    #     {{
+    #     "bbox_2d": [x1, y1, x2, y2],
+    #     "point_2d": [cx, cy]
+    #     }}
+    #     ]
+    #     </answer>
+
+    #     Instruction:
+    #     {instruction}
+    #     Tool name:
+    #     {tool_name}
+    # """
+
     PROMPT = """
-        You are a precise vision localization assistant.
+    Act as a senior medical surgeon performing a critical surgery. You are observing the surgical field and need to precisely locate the tool in the image to continue the procedure safely. Use the following as your reference:  
 
-        Return STRICT JSON format:
+    Instruction: {instruction}  
+    Tool name: {tool_name}  
 
-        <think>
-        brief reasoning
-        </think>
-        <answer>
-        [
-        {{
-        "bbox_2d": [x1, y1, x2, y2],
-        "point_2d": [cx, cy]
-        }}
-        ]
-        </answer>
+    Your response must strictly follow this format:  
 
-        Instruction:
-        {instruction}
-        Tool name:
-        {tool_name}
+    <think>
+    Provide brief reasoning for your identification. Keep it concise and clinically relevant.
+    </think>
+
+    <answer>
+    [
+    {{
+        "bbox_2d": [x, y, w, h],   
+        "point_2d": [cx, cy]           
+    }}
+    ]
+    </answer>
+
+    Rules:
+    1. Do not include any text outside <think> and <answer> tags.  
+    2. Always return a valid JSON object even if uncertain.  
+    3. Coordinates must be in pixel values.  
+    4. Focus on precision as if the patient's safety depends on it.
     """
 
     output_file = os.path.join(args.output_dir, "qwen3_predictions.jsonl")

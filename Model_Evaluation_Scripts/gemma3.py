@@ -5,7 +5,7 @@ import re
 import torch
 from PIL import Image
 from tqdm import tqdm
-from transformers import MllamaForConditionalGeneration, AutoProcessor
+from transformers import Gemma3ForConditionalGeneration, AutoProcessor
 import ijson
 
 
@@ -18,10 +18,10 @@ def stream_json(path):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset_json", default="/home/scratch-btech/Tawheed/SurgicalDataset/Combined_1016/output.json")
-    p.add_argument("--image_dir", default="/home/scratch-btech/Tawheed/SurgicalDataset/Combined_1016/")
-    p.add_argument("--output_dir", default="/home/2022bite008/Surgical/Outputs/LLAMA_3_2")
-    p.add_argument("--model_name", default="meta-llama/Llama-3.2-11B-Vision-Instruct")
+    p.add_argument("--dataset_json", default="/home/scratch-scholars/Tawheed/Combined_1016/output.json")
+    p.add_argument("--image_dir", default="/home/scratch-scholars/Tawheed/Combined_1016/")
+    p.add_argument("--output_dir", default="/home/gaash/Surgical/Outputs/Gemma_prompt_changed")
+    p.add_argument("--model_name", default="google/gemma-3-27b-it")
     return p.parse_args()
 
 
@@ -111,7 +111,7 @@ def main():
 
     print("Loading Qwen3 model...")
     processor = AutoProcessor.from_pretrained(args.model_name)
-    model = MllamaForConditionalGeneration.from_pretrained(
+    model = Gemma3ForConditionalGeneration.from_pretrained(
         args.model_name,
         torch_dtype="auto",
         device_map="auto"
@@ -119,26 +119,31 @@ def main():
     print("Model loaded successfully")
 
     PROMPT = """
-        You are a precise vision localization assistant.
-        Do not give any extra text just return the below defined formatted JSON with the bounding box and point coordinates.
-        Return STRICT JSON format:
+    Act as a senior medical surgeon performing a critical surgery. You are observing the surgical field and need to precisely locate the tool in the image to continue the procedure safely. Use the following as your reference:  
 
-        <think>
-        brief reasoning
-        </think>
-        <answer>
-        [
-        {{
-        "bbox_2d": [x1, y1, x2, y2],
-        "point_2d": [cx, cy]
-        }}
-        ]
-        </answer>
+    Instruction: {instruction}  
+    Tool name: {tool_name}  
 
-        Instruction:
-        {instruction}
-        Tool name:
-        {tool_name}
+    Your response must strictly follow this format:  
+
+    <think>
+    Provide brief reasoning for your identification. Keep it concise and clinically relevant.
+    </think>
+
+    <answer>
+    [
+    {{
+        "bbox_2d": [x, y, x2, y2],   
+        "point_2d": [cx, cy]           
+    }}
+    ]
+    </answer>
+
+    Rules:
+    1. Do not include any text outside <think> and <answer> tags.  
+    2. Always return a valid JSON object even if uncertain.  
+    3. Coordinates must be in pixel values.  
+    4. Focus on precision as if the patient's safety depends on it.
     """
 
     output_file = os.path.join(args.output_dir, "qwen3_predictions.jsonl")

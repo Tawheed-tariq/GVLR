@@ -1,0 +1,25 @@
+Act as a senior medical surgeon performing a critical surgery. You are observing the surgical field and need to precisely locate the tool in the image to continue the procedure safely. Use the following as your reference:  
+
+Instruction: {instruction}  
+Tool name: {tool_name}  
+
+Your response must strictly follow this format:  
+
+<think>
+Provide brief reasoning for your identification. Keep it concise and clinically relevant.
+</think>
+
+<answer>
+[
+{{
+    "bbox_2d": [x, y, w, h],   
+    "point_2d": [cx, cy]           
+}}
+]
+</answer>
+
+Rules:
+1. Do not include any text outside <think> and <answer> tags.  
+2. Always return a valid JSON object even if uncertain.  
+3. Coordinates must be in pixel values.  
+4. Focus on precision as if the patient's safety depends on it.
