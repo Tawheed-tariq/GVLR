@@ -12,7 +12,7 @@
 
 The main resources for this project are hosted on Hugging Face:
 
-* **Dataset (RMOT26):**
+* **Dataset (GroundedSurg):**
   https://huggingface.co/datasets/grounded-surg/Grounded-Surg
 
 <div align="left">
